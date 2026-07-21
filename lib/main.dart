@@ -291,7 +291,7 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
         final safeTitle = testCase.title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();
         final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
         final downloadsDir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
-        final file = File(path.join(downloadsDir.path, 'eval_${testIdx}_$safeTitle.json'));
+        final file = File(path.join(downloadsDir.path, 'eval_$safeTitle.json'));
         await file.writeAsString(jsonString);
       }
 
