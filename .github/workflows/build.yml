@@ -28,6 +28,11 @@ jobs:
         run: flutter pub get
       - name: Build Linux
         run: flutter build linux
+      - name: Download Models
+        run: |
+          mkdir -p build/linux/x64/release/bundle/data/models
+          curl -L -o build/linux/x64/release/bundle/data/models/model_quantized.onnx https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/onnx/model_quantized.onnx
+          curl -L -o build/linux/x64/release/bundle/data/models/tokenizer.json https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/tokenizer.json
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -51,6 +56,12 @@ jobs:
           CFLAGS: "-MD"
           CXXFLAGS: "-MD"
         run: flutter build windows
+      - name: Download Models
+        shell: bash
+        run: |
+          mkdir -p build/windows/x64/runner/Release/data/models
+          curl -L -o build/windows/x64/runner/Release/data/models/model_quantized.onnx https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/onnx/model_quantized.onnx
+          curl -L -o build/windows/x64/runner/Release/data/models/tokenizer.json https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/tokenizer.json
       - name: Build Windows Setup
         run: '& "C:\Program Files (x86)\Inno Setup 6\iscc.exe" windows\installer.iss'
       - name: Upload Windows Setup Artifact

@@ -118,15 +118,24 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
   Future<void> _loadModel() async {
     setState(() => _isLoading = true);
     try {
-      final docDir = await getApplicationDocumentsDirectory();
-      final onnxPath = path.join(docDir.path, "model_quantized.onnx");
-      final tokenizerPath = path.join(docDir.path, "tokenizer.json");
+      final exeDir = path.dirname(Platform.resolvedExecutable);
+      final bundledOnnxPath = path.join(exeDir, "data", "models", "model_quantized.onnx");
+      final bundledTokenizerPath = path.join(exeDir, "data", "models", "tokenizer.json");
 
-      const onnxUrl = "https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/onnx/model_quantized.onnx";
-      const tokenizerUrl = "https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/tokenizer.json";
+      String onnxPath = bundledOnnxPath;
+      String tokenizerPath = bundledTokenizerPath;
 
-      await _downloadFile(onnxUrl, onnxPath);
-      await _downloadFile(tokenizerUrl, tokenizerPath);
+      if (!(await File(bundledOnnxPath).exists()) || !(await File(bundledTokenizerPath).exists())) {
+        final docDir = await getApplicationDocumentsDirectory();
+        onnxPath = path.join(docDir.path, "model_quantized.onnx");
+        tokenizerPath = path.join(docDir.path, "tokenizer.json");
+
+        const onnxUrl = "https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/onnx/model_quantized.onnx";
+        const tokenizerUrl = "https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/tokenizer.json";
+
+        await _downloadFile(onnxUrl, onnxPath);
+        await _downloadFile(tokenizerUrl, tokenizerPath);
+      }
 
       setState(() => _error = "Initializing ONNX model in Rust...");
       await rust.loadModel(
@@ -144,6 +153,22 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
   Future<void> _deleteAndReloadModel() async {
     setState(() => _isLoading = true);
     try {
+      final exeDir = path.dirname(Platform.resolvedExecutable);
+      final bundledOnnxPath = path.join(exeDir, "data", "models", "model_quantized.onnx");
+      final bundledTokenizerPath = path.join(exeDir, "data", "models", "tokenizer.json");
+
+      if (await File(bundledOnnxPath).exists() && await File(bundledTokenizerPath).exists()) {
+        final stopwatch = Stopwatch()..start();
+        setState(() => _error = "Initializing bundled ONNX model in Rust...");
+        await rust.loadModel(
+          onnxPath: bundledOnnxPath,
+          tokenizerPath: bundledTokenizerPath
+        );
+        final loadTime = stopwatch.elapsedMilliseconds;
+        setState(() => _error = "Bundled model reloaded into RAM (${loadTime}ms).");
+        return;
+      }
+
       final docDir = await getApplicationDocumentsDirectory();
       final onnxFile = File(path.join(docDir.path, "model_quantized.onnx"));
       final tokenizerFile = File(path.join(docDir.path, "tokenizer.json"));
