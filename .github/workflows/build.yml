@@ -46,6 +46,8 @@ jobs:
       - name: Install flutter dependencies
         run: flutter pub get
       - name: Build Windows
+        env:
+          RUSTFLAGS: "-C target-feature=-crt-static"
         run: flutter build windows
       - name: Build Windows Setup
         run: '& "C:\Program Files (x86)\Inno Setup 6\iscc.exe" windows\installer.iss'
