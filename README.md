@@ -1,16 +1,36 @@
-# alignment_poc
+# Alignment POC
 
-A new Flutter project.
+A proof-of-concept application for evaluating contextual sliding-window sentence alignment. Built with **Flutter** (for the frontend) and **Rust** + **ONNX Runtime** (for tokenization, contextual embedding, and alignment logic).
 
-## Getting Started
+## Features
+- **Sliding Window Alignment:** A robust two-stage algorithm to align translated documents at the paragraph and sentence levels, effectively handling omissions and restructuring.
+- **Local AI Embeddings:** Uses the ONNX Runtime and tokenizers via Rust to compute high-performance embeddings completely locally without needing external APIs.
+- **Cross-Platform Desktop:** Supports Linux and Windows natively.
 
-This project is a starting point for a Flutter application.
+## Architecture
+- **Flutter UI (`lib/`)**: Provides the frontend interface for running test cases, triggering alignments, and visualizing the evaluation output.
+- **Rust Backend (`rust/`)**: Implements the sliding window alignment engine with contextual token-level embeddings.
+- **Flutter Rust Bridge**: Enables seamless, zero-copy interop between the Dart UI and the heavy Rust computation layer.
 
-A few resources to get you started if this is your first Flutter project:
+## Build Requirements
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+To build the application yourself, ensure you have the following installed:
+- [Flutter SDK](https://flutter.dev/docs/get-started/install) (>= 3.22.x)
+- [Rust Toolchain](https://rustup.rs/) (cargo, rustc)
+- CMake, Clang, and Ninja (for compiling native components)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Building the App
+
+**For Linux:**
+```bash
+flutter build linux
+```
+
+**For Windows:**
+```powershell
+flutter build windows
+```
+*(Windows release builds can also be packaged using the included `windows/installer.iss` Inno Setup script).*
+
+## Automated Builds
+This repository includes a GitHub Actions CI/CD pipeline that automatically builds and bundles artifacts (a Linux bundle and a Windows Setup Installer) whenever changes are pushed to the `main` branch.
