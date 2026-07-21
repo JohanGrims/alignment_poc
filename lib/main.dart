@@ -443,7 +443,15 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
       
       List<rust.AlignmentPair> wordAlignments = [];
       if (sa.sourceIndices.isNotEmpty && sa.targetIndices.isNotEmpty && sourceWords.isNotEmpty && targetWords.isNotEmpty) {
-        wordAlignments = await rust.alignWordsGreedy(sourceWords: sourceWords.map((m) => m.group(0)!).toList(), targetWords: targetWords.map((m) => m.group(0)!).toList(), threshold: 0.3);
+        final sourceSpans = sourceWords.map((m) => rust.WordSpan(start: m.start, end: m.end, text: m.group(0)!)).toList();
+        final targetSpans = targetWords.map((m) => rust.WordSpan(start: m.start, end: m.end, text: m.group(0)!)).toList();
+        wordAlignments = await rust.alignWordsContextual(
+          sourceText: sText,
+          sourceSpans: sourceSpans,
+          targetText: tText,
+          targetSpans: targetSpans,
+          threshold: 0.3,
+        );
       }
       segments.add(SegmentData(sa, sText, tText, sourceWords, targetWords, wordAlignments));
     }

@@ -400,3 +400,184 @@ pub fn align_words_greedy(source_words: Vec<String>, target_words: Vec<String>, 
 
     Ok(alignments)
 }
+
+pub struct WordSpan {
+    pub start: i32,
+    pub end: i32,
+    pub text: String,
+}
+
+pub fn align_words_contextual(
+    source_text: String,
+    source_spans: Vec<WordSpan>,
+    target_text: String,
+    target_spans: Vec<WordSpan>,
+    threshold: f32,
+) -> Result<Vec<AlignmentPair>, String> {
+    if source_spans.is_empty() || target_spans.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let tok_guard = TOKENIZER.read().unwrap();
+    let tokenizer = tok_guard.as_ref().ok_or("Tokenizer not loaded")?;
+    let mut mod_guard = MODEL.write().unwrap();
+    let model = mod_guard.as_mut().ok_or("Model not loaded")?;
+
+    let src_encoding = tokenizer.encode(source_text.as_str(), true).map_err(|e| e.to_string())?;
+    let tgt_encoding = tokenizer.encode(target_text.as_str(), true).map_err(|e| e.to_string())?;
+
+    let mut get_embeddings = |encoding: &tokenizers::Encoding, spans: &Vec<WordSpan>| -> Result<Vec<Vec<f32>>, String> {
+        let max_len = encoding.get_ids().len();
+        
+        let mut input_ids = vec![0i64; max_len];
+        let mut attention_mask = vec![0i64; max_len];
+        let mut token_type_ids = vec![0i64; max_len];
+        
+        for j in 0..max_len {
+            input_ids[j] = encoding.get_ids()[j] as i64;
+            attention_mask[j] = encoding.get_attention_mask()[j] as i64;
+            token_type_ids[j] = encoding.get_type_ids()[j] as i64;
+        }
+
+        let input_ids_array = ndarray::Array2::from_shape_vec((1, max_len), input_ids).unwrap();
+        let attention_mask_array = ndarray::Array2::from_shape_vec((1, max_len), attention_mask).unwrap();
+        let token_type_ids_array = ndarray::Array2::from_shape_vec((1, max_len), token_type_ids).unwrap();
+
+        let inputs = ort::inputs![
+            "input_ids" => Value::from_array(input_ids_array).unwrap(),
+            "attention_mask" => Value::from_array(attention_mask_array).unwrap(),
+            "token_type_ids" => Value::from_array(token_type_ids_array).unwrap(),
+        ];
+
+        let outputs = model.run(inputs).map_err(|e| e.to_string())?;
+        let output = outputs["last_hidden_state"].try_extract_tensor::<f32>().map_err(|e| e.to_string())?;
+        let flat_output = output.1; // size is [1, max_len, 384]
+
+        let offsets = encoding.get_offsets();
+
+        let mut word_embs = Vec::with_capacity(spans.len());
+        for span in spans {
+            let mut sum_embedding = vec![0.0; 384];
+            let mut valid_tokens = 0;
+            
+            for j in 0..max_len {
+                let off = offsets[j];
+                // Ignore special tokens (offset 0,0 usually, or just bounds check)
+                if off.0 == 0 && off.1 == 0 { continue; }
+                
+                // Overlap check
+                if off.0 < span.end as usize && off.1 > span.start as usize {
+                    for d in 0..384 {
+                        sum_embedding[d] += flat_output[j * 384 + d];
+                    }
+                    valid_tokens += 1;
+                }
+            }
+            
+            if valid_tokens > 0 {
+                let mut norm = 0.0;
+                for d in 0..384 {
+                    sum_embedding[d] /= valid_tokens as f32;
+                    norm += sum_embedding[d] * sum_embedding[d];
+                }
+                norm = norm.sqrt();
+                for d in 0..384 {
+                    sum_embedding[d] /= norm.max(1e-9);
+                }
+            }
+            word_embs.push(sum_embedding);
+        }
+        
+        Ok(word_embs)
+    };
+
+    let src_embs = get_embeddings(&src_encoding, &source_spans)?;
+    let tgt_embs = get_embeddings(&tgt_encoding, &target_spans)?;
+
+    let n = source_spans.len();
+    let m = target_spans.len();
+
+    let mut edges = Vec::new();
+    for i in 0..n {
+        for j in 0..m {
+            let sim = cosine_similarity(&src_embs[i], &tgt_embs[j]);
+            if sim >= threshold {
+                edges.push((sim, i, j));
+            }
+        }
+    }
+
+    edges.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut parent = (0..(n + m)).collect::<Vec<usize>>();
+    let mut comp_size = vec![1; n + m];
+    let mut degree = vec![0; n + m];
+
+    fn find(mut i: usize, parent: &mut Vec<usize>) -> usize {
+        while i != parent[i] {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+
+    let mut final_edges = Vec::new();
+
+    for (sim, i, j) in edges {
+        let u = i;
+        let v = n + j;
+
+        if degree[u] >= 2 || degree[v] >= 2 {
+            continue;
+        }
+
+        let root_u = find(u, &mut parent);
+        let root_v = find(v, &mut parent);
+
+        if root_u != root_v {
+            if comp_size[root_u] + comp_size[root_v] <= 4 {
+                parent[root_u] = root_v;
+                comp_size[root_v] += comp_size[root_u];
+                
+                degree[u] += 1;
+                degree[v] += 1;
+                final_edges.push((i, j, sim));
+            }
+        }
+    }
+
+    let mut comp_map: std::collections::HashMap<usize, (Vec<i32>, Vec<i32>, f32, i32)> = std::collections::HashMap::new();
+    
+    for i in 0..n {
+        let root = find(i, &mut parent);
+        comp_map.entry(root).or_insert((Vec::new(), Vec::new(), 0.0, 0)).0.push(i as i32);
+    }
+    for j in 0..m {
+        let root = find(n + j, &mut parent);
+        comp_map.entry(root).or_insert((Vec::new(), Vec::new(), 0.0, 0)).1.push(j as i32);
+    }
+
+    for (i, _, sim) in final_edges {
+        let root = find(i, &mut parent);
+        if let Some(entry) = comp_map.get_mut(&root) {
+            entry.2 += sim;
+            entry.3 += 1;
+        }
+    }
+
+    let mut alignments = Vec::new();
+    for (_, (mut src, mut tgt, sum_sim, count)) in comp_map {
+        if !src.is_empty() && !tgt.is_empty() {
+            src.sort_unstable();
+            tgt.sort_unstable();
+            let avg_sim = if count > 0 { sum_sim / count as f32 } else { 0.0 };
+            alignments.push(AlignmentPair {
+                source_indices: src,
+                target_indices: tgt,
+                score: 1.0 - avg_sim, // Cost
+            });
+        }
+    }
+
+    Ok(alignments)
+}

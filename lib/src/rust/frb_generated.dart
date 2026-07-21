@@ -72,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -234719232;
+  int get rustContentHash => 2070494632;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -88,6 +88,13 @@ abstract class RustLibApi extends BaseApi {
       {required List<String> sourceSentences,
       required List<String> targetSentences,
       required int maxAlign});
+
+  Future<List<AlignmentPair>> crateApiAlignmentAlignWordsContextual(
+      {required String sourceText,
+      required List<WordSpan> sourceSpans,
+      required String targetText,
+      required List<WordSpan> targetSpans,
+      required double threshold});
 
   Future<List<AlignmentPair>> crateApiAlignmentAlignWordsGreedy(
       {required List<String> sourceWords,
@@ -145,6 +152,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<AlignmentPair>> crateApiAlignmentAlignWordsContextual(
+      {required String sourceText,
+      required List<WordSpan> sourceSpans,
+      required String targetText,
+      required List<WordSpan> targetSpans,
+      required double threshold}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_String(sourceText, serializer);
+        sse_encode_list_word_span(sourceSpans, serializer);
+        sse_encode_String(targetText, serializer);
+        sse_encode_list_word_span(targetSpans, serializer);
+        sse_encode_f_32(threshold, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 2, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_alignment_pair,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateApiAlignmentAlignWordsContextualConstMeta,
+      argValues: [sourceText, sourceSpans, targetText, targetSpans, threshold],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiAlignmentAlignWordsContextualConstMeta =>
+      const TaskConstMeta(
+        debugName: "align_words_contextual",
+        argNames: [
+          "sourceText",
+          "sourceSpans",
+          "targetText",
+          "targetSpans",
+          "threshold"
+        ],
+      );
+
+  @override
   Future<List<AlignmentPair>> crateApiAlignmentAlignWordsGreedy(
       {required List<String> sourceWords,
       required List<String> targetWords,
@@ -156,7 +203,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_list_String(targetWords, serializer);
         sse_encode_f_32(threshold, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 2, port: port_);
+            funcId: 3, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_alignment_pair,
@@ -180,7 +227,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 3, port: port_);
+            funcId: 4, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -204,7 +251,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(name, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -227,7 +274,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 5, port: port_);
+            funcId: 6, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -250,7 +297,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 6, port: port_);
+            funcId: 7, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -276,7 +323,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(onnxPath, serializer);
         sse_encode_String(tokenizerPath, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
+            funcId: 8, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -349,6 +396,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<WordSpan> dco_decode_list_word_span(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_word_span).toList();
+  }
+
+  @protected
   int dco_decode_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -364,6 +417,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  WordSpan dco_decode_word_span(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return WordSpan(
+      start: dco_decode_i_32(arr[0]),
+      end: dco_decode_i_32(arr[1]),
+      text: dco_decode_String(arr[2]),
+    );
   }
 
   @protected
@@ -437,6 +503,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<WordSpan> sse_decode_list_word_span(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <WordSpan>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_word_span(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -451,6 +529,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  WordSpan sse_decode_word_span(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_start = sse_decode_i_32(deserializer);
+    var var_end = sse_decode_i_32(deserializer);
+    var var_text = sse_decode_String(deserializer);
+    return WordSpan(start: var_start, end: var_end, text: var_text);
   }
 
   @protected
@@ -521,6 +608,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_word_span(
+      List<WordSpan> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_word_span(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint32(self);
@@ -535,6 +632,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  void sse_encode_word_span(WordSpan self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.start, serializer);
+    sse_encode_i_32(self.end, serializer);
+    sse_encode_String(self.text, serializer);
   }
 
   @protected

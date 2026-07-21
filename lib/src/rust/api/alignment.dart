@@ -35,6 +35,19 @@ Future<List<AlignmentPair>> alignWordsGreedy(
         targetWords: targetWords,
         threshold: threshold);
 
+Future<List<AlignmentPair>> alignWordsContextual(
+        {required String sourceText,
+        required List<WordSpan> sourceSpans,
+        required String targetText,
+        required List<WordSpan> targetSpans,
+        required double threshold}) =>
+    RustLib.instance.api.crateApiAlignmentAlignWordsContextual(
+        sourceText: sourceText,
+        sourceSpans: sourceSpans,
+        targetText: targetText,
+        targetSpans: targetSpans,
+        threshold: threshold);
+
 class AlignmentPair {
   final Int32List sourceIndices;
   final Int32List targetIndices;
@@ -58,4 +71,28 @@ class AlignmentPair {
           sourceIndices == other.sourceIndices &&
           targetIndices == other.targetIndices &&
           score == other.score;
+}
+
+class WordSpan {
+  final int start;
+  final int end;
+  final String text;
+
+  const WordSpan({
+    required this.start,
+    required this.end,
+    required this.text,
+  });
+
+  @override
+  int get hashCode => start.hashCode ^ end.hashCode ^ text.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WordSpan &&
+          runtimeType == other.runtimeType &&
+          start == other.start &&
+          end == other.end &&
+          text == other.text;
 }
