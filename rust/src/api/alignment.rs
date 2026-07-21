@@ -531,6 +531,14 @@ pub fn align_words_contextual(
             continue;
         }
 
+        // --- N:M Penalty ---
+        // Reward 1:1 mappings by penalizing edges that attach to already mapped nodes.
+        // If a node already has 1 edge, it costs a penalty of 0.15 to add a second edge.
+        let penalty = 0.15 * (degree[u] + degree[v]) as f32;
+        if sim - penalty < threshold {
+            continue;
+        }
+
         let root_u = find(u, &mut parent);
         let root_v = find(v, &mut parent);
 
