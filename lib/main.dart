@@ -60,6 +60,7 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
   List<SegmentData> _segments = [];
   int _alignmentDurationMs = 0;
   String _error = "";
+  double? _downloadProgress;
 
   @override
   void initState() {
@@ -82,13 +83,36 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
     final file = File(savePath);
     if (await file.exists()) return;
 
-    setState(() => _error = "Downloading ${path.basename(savePath)}...");
-    final response = await http.get(Uri.parse(url));
+    setState(() {
+      _error = "Downloading ${path.basename(savePath)}...";
+      _downloadProgress = 0.0;
+    });
+
+    final request = http.Request('GET', Uri.parse(url));
+    final response = await http.Client().send(request);
+
     if (response.statusCode == 200) {
-      await file.writeAsBytes(response.bodyBytes);
+      final contentLength = response.contentLength;
+      int downloaded = 0;
+      final sink = file.openWrite();
+
+      await for (final chunk in response.stream) {
+        sink.add(chunk);
+        downloaded += chunk.length;
+        if (contentLength != null) {
+          setState(() {
+            _downloadProgress = downloaded / contentLength;
+          });
+        }
+      }
+      await sink.close();
     } else {
       throw Exception("Failed to download file from $url: ${response.statusCode}");
     }
+    
+    setState(() {
+      _downloadProgress = null;
+    });
   }
 
   Future<void> _loadModel() async {
@@ -266,13 +290,14 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
 
         final safeTitle = testCase.title.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_').toLowerCase();
         final jsonString = const JsonEncoder.withIndent('  ').convert(exportData);
-        final file = File('eval_${testIdx}_$safeTitle.json');
+        final downloadsDir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+        final file = File(path.join(downloadsDir.path, 'eval_${testIdx}_$safeTitle.json'));
         await file.writeAsString(jsonString);
       }
 
       setState(() {
         _isLoading = false;
-        _error = "Generated separate eval JSON files for ${predefinedTests.length} tests.";
+        _error = "Generated separate eval JSON files for ${predefinedTests.length} in your Downloads folder.";
       });
     } catch (e) {
       setState(() {
@@ -579,7 +604,16 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Vecalign Playground (MiniLM-L12)')),
+      appBar: AppBar(
+        title: const Text('Vecalign Playground (MiniLM-L12)'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_forever),
+            tooltip: 'Delete & Reload Model',
+            onPressed: _isLoading ? null : _deleteAndReloadModel,
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -610,7 +644,16 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
               Container(
                 padding: const EdgeInsets.all(8),
                 color: _error.contains("Error") ? Colors.red.shade100 : Colors.green.shade100,
-                child: Text(_error),
+                width: double.infinity,
+                child: Column(
+                  children: [
+                    Text(_error),
+                    if (_downloadProgress != null) ...[
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(value: _downloadProgress),
+                    ]
+                  ],
+                ),
               ),
             const SizedBox(height: 16),
             Expanded(
@@ -654,12 +697,6 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
                   label: const Text('Align (Sliding Window)'),
                 ),
                 const SizedBox(width: 16),
-                OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _deleteAndReloadModel,
-                  icon: const Icon(Icons.delete),
-                  label: const Text('Delete & Reload Model'),
-                ),
-                const SizedBox(width: 16),
                 FilledButton.tonalIcon(
                   onPressed: _isLoading || _segments.isEmpty ? null : _exportJson,
                   icon: const Icon(Icons.download),
@@ -677,10 +714,12 @@ class _AlignmentPlaygroundState extends State<AlignmentPlayground> {
             const SizedBox(height: 16),
             Expanded(
               flex: 2,
-              child: _segments.isEmpty
-                ? const Center(child: Text("Click 'Align Sentences' to see the result."))
-                : Column(
-                    children: [
+              child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _segments.isEmpty
+                  ? const Center(child: Text("Click 'Align Sentences' to see the result."))
+                  : Column(
+                      children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8.0),
                         child: Row(
