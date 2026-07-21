@@ -48,6 +48,8 @@ jobs:
       - name: Build Windows
         env:
           RUSTFLAGS: "-C target-feature=-crt-static"
+          CFLAGS: "-MD"
+          CXXFLAGS: "-MD"
         run: flutter build windows
       - name: Build Windows Setup
         run: '& "C:\Program Files (x86)\Inno Setup 6\iscc.exe" windows\installer.iss'
